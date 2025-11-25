@@ -1,0 +1,24 @@
+/* Light green background */
+.bg-light-green {
+    background-color: #eaf6e3;
+}
+
+/* Card customization */
+.login-card {
+    width: 380px;
+    border-radius: 12px;
+}
+
+/* Buttons & inputs */
+.btn-success {
+    background-color: #65a30d;
+    border: none;
+}
+
+.btn-success:hover {
+    background-color: #4d7c0f;
+}
+
+.form-control {
+    padding: 12px;
+}

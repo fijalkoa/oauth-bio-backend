@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Login - BioSSO</title>
+
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom CSS -->
+    <link href="/css/styles.css" rel="stylesheet">
+</head>
+<body class="bg-light-green">
+
+<div class="d-flex justify-content-center align-items-center vh-100">
+    <div class="card shadow p-4 login-card">
+        <div class="text-center mb-4">
+            <img src="/images/leaf.png" alt="Logo" width="32">
+            <h4 class="fw-bold">BioSSO</h4>
+        </div>
+
+        <h3 class="fw-bold text-center">Log in</h3>
+        <p class="text-center">to continue to <span class="text-success">calendar-app</span></p>
+
+        <!-- Login form -->
+        <form th:action="@{/login}" method="post">
+            <div class="mb-3">
+                <input type="email" name="username" class="form-control rounded-pill" placeholder="Email address" required>
+            </div>
+            <div class="mb-3">
+                <input type="password" name="password" class="form-control rounded-pill" placeholder="Password" required>
+            </div>
+
+            <div class="form-check mb-3">
+                <input type="checkbox" class="form-check-input" id="rememberMe" name="remember-me">
+                <label class="form-check-label small" for="rememberMe">Don’t logout</label>
+            </div>
+
+            <div class="d-grid mb-3">
+                <button type="submit" class="btn btn-success rounded-pill fw-bold">Continue</button>
+            </div>
+        </form>
+
+        <div class="text-center small">
+            <a href="#" class="d-block">Don’t remember password? ↗</a>
+            <a href="#" class="d-block">Don’t have an account yet? ↗</a>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap JS -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
