@@ -68,28 +68,4 @@ public class WsClientApp {
             session.close();
         }
     }
-
-    public static void main(String[] args) throws Exception {
-        // Path to the image you want to send
-        Path imagePath = Path.of("C:/dev/oauth-bio/face1.jpg"); // replace with your file
-
-        // WebSocket server URL
-        URI serverUri = URI.create("ws://localhost:5000/ws");
-
-        System.out.println("[APP] Connecting to " + serverUri);
-
-        // Connect to WebSocket server
-        WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-        WsClientApp client = new WsClientApp();
-        container.connectToServer(client, serverUri);
-
-        // Wait briefly for connection
-        Thread.sleep(500);
-
-        // Send image
-        client.sendImage(imagePath);
-
-        System.out.println("[APP] Done, exiting.");
-        System.exit(0);
-    }
 }
