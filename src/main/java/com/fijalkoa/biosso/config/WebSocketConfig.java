@@ -1,19 +1,16 @@
 package com.fijalkoa.biosso.config;
 
-import com.fijalkoa.biosso.biometric.FaceWebSocketHandler;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.config.annotation.EnableWebSocket;
-import org.springframework.web.socket.config.annotation.WebSocketConfigurer;
-import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry;
 
+/**
+ * WebSocket configuration is no longer used.
+ * Biometric communication now uses REST endpoints instead.
+ * 
+ * Legacy WebSocket handler (FaceWebSocketHandler) is deprecated.
+ * Use BiometricRestController for all biometric operations.
+ */
 @Configuration
-@EnableWebSocket
-public class WebSocketConfig implements WebSocketConfigurer {
-
-    @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        FaceWebSocketHandler faceHandler = new FaceWebSocketHandler();
-        registry.addHandler(faceHandler, "/ws/face")
-                .setAllowedOrigins("*");
-    }
+public class WebSocketConfig {
+    // Biometric operations now use REST API instead of WebSocket
 }
+

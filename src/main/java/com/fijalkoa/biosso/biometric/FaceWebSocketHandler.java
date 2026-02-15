@@ -1,32 +1,24 @@
 package com.fijalkoa.biosso.biometric;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.stereotype.Component;
-import org.springframework.web.socket.*;
-import org.springframework.web.socket.handler.BinaryWebSocketHandler;
+import lombok.extern.slf4j.Slf4j;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.WebSocket;
-import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Paths;
-import java.security.SecureRandom;
-import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.CompletionStage;
-import java.util.concurrent.ConcurrentHashMap;
+/**
+ * DEPRECATED - WebSocket handler is no longer used
+ * 
+ * Biometric communication has been migrated to REST API.
+ * Use BiometricController and BiometricRestService instead.
+ * 
+ * This class is kept for reference only.
+ */
+@Slf4j
+@Deprecated(since = "2.0.0", forRemoval = true)
+public class FaceWebSocketHandler {
 
-@Component
-public class FaceWebSocketHandler extends BinaryWebSocketHandler {
-
-    private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final SecureRandom RNG = new SecureRandom();
-    private static final String MICROSERVICE_WS_URL = "ws://localhost:5001/ws";
-    private final Map<String, SessionState> sessions = new ConcurrentHashMap<>();
+    public FaceWebSocketHandler() {
+        log.warn("⚠️ FaceWebSocketHandler is deprecated and should not be instantiated");
+        log.warn("   Use BiometricController (/api/biometric/register, /api/biometric/verify) instead");
+    }
+}
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) {
@@ -57,55 +49,42 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         String payload = message.getPayload();
-        System.out.println("[JAVA] received from frontend: " + payload);
+        System.out.println("[JAVA] received text message from frontend: " + payload.substring(0, Math.min(100, payload.length())));
         
-        // Wyślij wiadomość do mikroserwisu
         SessionState state = sessions.get(session.getId());
-        if (state != null && state.microserviceWs != null) {
-            try {
-                state.microserviceWs.sendText("Frontend message: " + payload, true);
-                System.out.println("[JAVA] forwarded to microservice: " + payload);
-            } catch (Exception e) {
-                System.err.println("[JAVA] error sending to microservice: " + e.getMessage());
-            }
+        if (state == null) {
+            state = new SessionState();
+            sessions.put(session.getId(), state);
         }
-        
+
         try {
             if (payload.startsWith("{")) {
                 JsonNode node = MAPPER.readTree(payload);
+                
+                // Extract metadata
                 if (node.has("type") && "meta".equals(node.get("type").asText())) {
-                    String mode = node.has("mode") ? node.get("mode").asText() : null;
+                    String mode = node.has("mode") ? node.get("mode").asText("login") : "login";
                     String step = node.has("step") ? node.get("step").asText(null) : null;
                     String userId = node.has("userId") ? node.get("userId").asText("unknown") : "unknown";
-                    SessionState st = sessions.get(session.getId());
-
-                    st.currentMeta = Map.of("mode", mode != null ? mode : "login", "step", step);
-                    st.userId = userId;
                     
-                    // Save registration data if present
-                    if (node.has("registrationData")) {
-                        st.registrationData = node.get("registrationData");
-                        System.out.println("[JAVA] received registration data for user: " + userId);
-                    }
+                    state.currentMeta = Map.of("mode", mode, "step", step != null ? step : "");
+                    state.userId = userId;
                     
-                    System.out.println("[JAVA] received meta: mode=" + mode + " step=" + step + " userId='" + userId + "'");
+                    System.out.println("[JAVA] received metadata: mode=" + mode + " step=" + step + " userId=" + userId);
                     return;
                 }
             }
         } catch (Exception e) {
-            System.err.println("[JAVA] error parsing meta message: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("[JAVA] error parsing message: " + e.getMessage());
         }
 
-        String data = payload;
-
-        System.out.println("[JAVA] text message: " + data);
-        if ("REGISTER_FINISHED".equals(data)) {
-
+        // Simple text commands
+        if ("REGISTER_FINISHED".equals(payload)) {
+            System.out.println("[JAVA] register finished signal received");
             try {
                 session.sendMessage(new TextMessage("ENROLLMENT_OK"));
             } catch (IOException e) {
-                throw new RuntimeException(e);
+                System.err.println("[JAVA] error sending ENROLLMENT_OK: " + e.getMessage());
             }
         }
     }
@@ -123,7 +102,8 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
         }
 
         if (bytes.length < 1) return;
-        int header = bytes[0]; // 0=start,1=middle,2=end
+        
+        int header = bytes[0]; // 0=start, 1=middle, 2=end
         byte[] chunk = Arrays.copyOfRange(bytes, 1, bytes.length);
 
         if (header == 0) {
@@ -133,57 +113,51 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
             st.append(chunk);
         } else if (header == 2) {
             st.append(chunk);
-            byte[] full = st.toByteArray();
-            // save image to disk (optional)
-            String filename = "received_" + session.getId() + "_" + System.currentTimeMillis() + ".png";
-            Files.write(Paths.get(filename), full);
-            System.out.println("[JAVA] received full image saved: " + filename + " size=" + full.length);
+            byte[] imageData = st.toByteArray();
+            
+            // Log that image was received (for session metadata only)
+            st.imagesReceived++;
+            System.out.println("[JAVA] received image " + st.imagesReceived + 
+                    " for session: " + session.getId() + 
+                    " size=" + imageData.length);
 
-            // process according to last meta
-            Map<String, String> meta = st.currentMeta != null ? st.currentMeta : Map.of("mode", "login", "step", "0");
+            // Process according to metadata
+            Map<String, String> meta = st.currentMeta != null ? st.currentMeta : Map.of("mode", "login");
             String mode = meta.getOrDefault("mode", "login");
             String step = meta.get("step");
 
-            if (st.currentMeta == null) {
-                System.out.println("[JAVA] WARNING: currentMeta is null, using default (login mode). userId=" + st.userId);
-            }
             System.out.println("[JAVA] processing image for mode=" + mode + " step=" + step);
 
             if ("login".equalsIgnoreCase(mode)) {
                 // Send image to Python microservice for verification
-                sendImageToMicroservice(session, full, mode, step, st.userId);
+                sendImageToMicroservice(session, imageData, mode, step, st.userId);
             } else if ("register".equalsIgnoreCase(mode)) {
-                // store the image
-                st.enrolledImages.add(full);
+                // For registration, collect images and manage sequence
+                st.enrolledImages.add(imageData);
 
-                // if this is first image (step=0 or null), send next MOVE_HEAD
                 if (st.enrolledImages.size() == 1) {
-                    // generate random sequence of 4 moves
                     st.moveSequence = generateRandomMoveSequence(4);
                     st.moveIndex = 0;
                 }
 
-                // if we just received a movement capture (step equals movement name), advance
                 if (step != null && !step.equals("0")) {
-                    // step will be movement name (LEFT/RIGHT/UP/DOWN)
                     st.moveIndex = Math.min(st.moveIndex + 1, st.moveSequence.size());
                 }
 
                 if (st.moveIndex < st.moveSequence.size()) {
                     String nextMove = st.moveSequence.get(st.moveIndex);
                     session.sendMessage(new TextMessage("MOVE_HEAD:" + nextMove));
-                    System.out.println("[JAVA] ask move: " + nextMove);
+                    System.out.println("[JAVA] requesting move: " + nextMove);
                 } else {
-                    // finished - send all data to Python
-                    System.out.println("[JAVA] enrollment finished, sending data to microservice. Total images: " + st.enrolledImages.size());
+                    // All images collected, send to Python for processing
+                    System.out.println("[JAVA] enrollment phase complete, images collected: " + st.enrolledImages.size());
                     sendRegistrationDataToMicroservice(session, st);
                     st.enrolledImages.clear();
                 }
             } else {
-                session.sendMessage(new TextMessage("UNKNOWN_MODE"));
+                session.sendMessage(new TextMessage("ERROR_UNKNOWN_MODE"));
             }
 
-            // clear currentMeta so next meta expected
             st.currentMeta = null;
         }
     }
@@ -204,29 +178,31 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
 
     private void sendRegistrationDataToMicroservice(WebSocketSession session, SessionState state) {
         if (state == null || state.microserviceWs == null) {
-            System.err.println("[JAVA] microservice connection not available");
+            System.err.println("[JAVA] microservice connection not available for registration");
             return;
         }
 
         try {
-            // Encode all images to Base64
+            // Encode all collected images to Base64
             List<String> base64Images = new ArrayList<>();
             for (byte[] imageData : state.enrolledImages) {
                 base64Images.add(Base64.getEncoder().encodeToString(imageData));
             }
             
-            // Create JSON message with registration data and images
+            // Create registration message for Python microservice
+            // Python will handle all encryption and storage
             Map<String, Object> message = new HashMap<>();
             message.put("type", "register");
             message.put("userId", state.userId);
             message.put("images", base64Images);
-            message.put("userData", state.registrationData);
+            message.put("moveSequence", state.moveSequence);
             
             String jsonMessage = MAPPER.writeValueAsString(message);
             state.microserviceWs.sendText(jsonMessage, true);
-            System.out.println("[JAVA] sent registration data to microservice: userId=" + state.userId + " images=" + base64Images.size());
+            System.out.println("[JAVA] ✅ sent registration data to Python: userId=" + state.userId + 
+                    " images=" + base64Images.size());
         } catch (Exception e) {
-            System.err.println("[JAVA] error sending registration data to microservice: " + e.getMessage());
+            System.err.println("[JAVA] ❌ error sending registration data to microservice: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -234,17 +210,18 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
     private void sendImageToMicroservice(WebSocketSession session, byte[] imageData, String mode, String step, String userId) {
         SessionState state = sessions.get(session.getId());
         if (state == null || state.microserviceWs == null) {
-            System.err.println("[JAVA] microservice connection not available");
+            System.err.println("[JAVA] microservice connection not available for verification");
             return;
         }
 
         try {
-            // Encode image to Base64
+            // Encode image to Base64 for transmission
             String base64Image = Base64.getEncoder().encodeToString(imageData);
             
-            // Create JSON message with image and metadata
+            // Create verification message for Python microservice
+            // Python will handle all decryption and matching
             Map<String, Object> message = new HashMap<>();
-            message.put("type", "image");
+            message.put("type", "verify");
             message.put("mode", mode);
             message.put("step", step);
             message.put("userId", userId);
@@ -252,9 +229,9 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
             
             String jsonMessage = MAPPER.writeValueAsString(message);
             state.microserviceWs.sendText(jsonMessage, true);
-            System.out.println("[JAVA] sent image to microservice: mode=" + mode + " userId=" + userId);
+            System.out.println("[JAVA] ✅ sent verification image to Python: userId=" + userId);
         } catch (Exception e) {
-            System.err.println("[JAVA] error sending image to microservice: " + e.getMessage());
+            System.err.println("[JAVA] ❌ error sending image to microservice: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -272,17 +249,17 @@ public class FaceWebSocketHandler extends BinaryWebSocketHandler {
         }
     }
 
-    // SessionState inner class
+    // SessionState inner class - maintains state for current WebSocket connection
     private static class SessionState {
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         Map<String, String> currentMeta = null;
-        List<byte[]> enrolledImages = new ArrayList<>();
-        List<String> moveSequence = new ArrayList<>();
+        List<byte[]> enrolledImages = new ArrayList<>();  // For registration: collected images before sending to Python
+        List<String> moveSequence = new ArrayList<>();     // For registration: head movement sequence
         int moveIndex = 0;
         WebSocket microserviceWs = null;
         String userId = "unknown";
         WebSocketSession frontendSession = null;
-        JsonNode registrationData = null;
+        int imagesReceived = 0;
 
         void append(byte[] chunk) {
             try {
